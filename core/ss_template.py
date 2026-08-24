@@ -11,13 +11,17 @@ WIB = timezone(
     timedelta(hours=7)
 )
 
+
+# ============================================================
 # HEALTH BAR
+# ============================================================
 
 def inject_health_bar(
     page,
     http_status,
     dashboard_ready,
     failed_requests,
+    failed_api_requests,
     status=None,
     message=None,
 ):
@@ -28,6 +32,7 @@ def inject_health_bar(
             http_status == 200
             and dashboard_ready
             and failed_requests == 0
+            and len(failed_api_requests) == 0
         )
 
         if is_healthy:
@@ -60,6 +65,7 @@ def inject_health_bar(
             httpStatus,
             dashboardReady,
             failedRequests,
+            failedApiRequests,
             checkedAt,
             statusBackground
         }) => {
@@ -104,7 +110,13 @@ def inject_health_bar(
                 box-sizing: border-box;
                 gap: 14px;
                 font-size: 12px;
+                overflow: hidden;
             `;
+
+
+            // ====================================================
+            // STATUS
+            // ====================================================
 
             const statusElement =
                 document.createElement('div');
@@ -120,9 +132,16 @@ def inject_health_bar(
                 font-weight: 700;
                 letter-spacing: 0.5px;
                 white-space: nowrap;
+                flex-shrink: 0;
             `;
 
-            statusElement.textContent = status;
+            statusElement.textContent =
+                status;
+
+
+            // ====================================================
+            // MESSAGE
+            // ====================================================
 
             const messageElement =
                 document.createElement('div');
@@ -130,9 +149,16 @@ def inject_health_bar(
             messageElement.style.cssText = `
                 font-weight: 600;
                 white-space: nowrap;
+                flex-shrink: 0;
             `;
 
-            messageElement.textContent = message;
+            messageElement.textContent =
+                message;
+
+
+            // ====================================================
+            // HTTP STATUS
+            // ====================================================
 
             const httpElement =
                 document.createElement('div');
@@ -140,10 +166,16 @@ def inject_health_bar(
             httpElement.style.cssText = `
                 white-space: nowrap;
                 opacity: 0.9;
+                flex-shrink: 0;
             `;
 
             httpElement.textContent =
                 `HTTP ${httpStatus}`;
+
+
+            // ====================================================
+            // DASHBOARD READY
+            // ====================================================
 
             const renderElement =
                 document.createElement('div');
@@ -151,6 +183,7 @@ def inject_health_bar(
             renderElement.style.cssText = `
                 white-space: nowrap;
                 opacity: 0.9;
+                flex-shrink: 0;
             `;
 
             renderElement.textContent =
@@ -158,18 +191,62 @@ def inject_health_bar(
                     ? 'View ready'
                     : 'View not ready';
 
+
+            // ====================================================
+            // FAILED REQUESTS
+            // ====================================================
+
             const requestElement =
                 document.createElement('div');
 
             requestElement.style.cssText = `
                 white-space: nowrap;
                 opacity: 0.9;
+                flex-shrink: 0;
             `;
 
             requestElement.textContent =
                 failedRequests === 0
                     ? 'Connection stable'
                     : `${failedRequests} failed requests`;
+
+
+            // ====================================================
+            // API STATUS
+            // ====================================================
+
+            const apiElement =
+                document.createElement('div');
+
+            apiElement.style.cssText = `
+                white-space: nowrap;
+                opacity: 0.95;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+                flex: 1;
+            `;
+
+
+            if (failedApiRequests.length === 0) {
+
+                apiElement.textContent =
+                    'API stable';
+
+            } else {
+
+                apiElement.textContent =
+                    'API: ' +
+                    failedApiRequests.join(' | ');
+
+                apiElement.title =
+                    failedApiRequests.join('\\n');
+            }
+
+
+            // ====================================================
+            // CHECKED TIME
+            // ====================================================
 
             const timeElement =
                 document.createElement('div');
@@ -178,21 +255,52 @@ def inject_health_bar(
                 margin-left: auto;
                 white-space: nowrap;
                 opacity: 0.8;
+                flex-shrink: 0;
             `;
 
             timeElement.textContent =
                 `Checked ${checkedAt}`;
 
-            box.appendChild(statusElement);
-            box.appendChild(messageElement);
-            box.appendChild(httpElement);
-            box.appendChild(renderElement);
-            box.appendChild(requestElement);
-            box.appendChild(timeElement);
 
-            container.appendChild(box);
+            // ====================================================
+            // APPEND
+            // ====================================================
 
-            document.body.appendChild(container);
+            box.appendChild(
+                statusElement
+            );
+
+            box.appendChild(
+                messageElement
+            );
+
+            box.appendChild(
+                httpElement
+            );
+
+            box.appendChild(
+                renderElement
+            );
+
+            box.appendChild(
+                requestElement
+            );
+
+            box.appendChild(
+                apiElement
+            );
+
+            box.appendChild(
+                timeElement
+            );
+
+            container.appendChild(
+                box
+            );
+
+            document.body.appendChild(
+                container
+            );
         }
         """,
         {
@@ -201,6 +309,7 @@ def inject_health_bar(
             "httpStatus": http_status,
             "dashboardReady": dashboard_ready,
             "failedRequests": failed_requests,
+            "failedApiRequests": failed_api_requests,
             "checkedAt": checked_at,
             "statusBackground": status_background,
         }
@@ -440,6 +549,7 @@ def run_page(
             "DISCORD_WEBHOOK_URL belum ditemukan di .env"
         )
 
+
     # ========================================================
     # PLAYWRIGHT
     # ========================================================
@@ -449,6 +559,7 @@ def run_page(
         browser = None
         context = None
         page = None
+
 
         # ====================================================
         # CREATE BROWSER CONTEXT
@@ -513,11 +624,19 @@ def run_page(
 
             page = context.new_page()
 
+
         # ====================================================
         # FAILED REQUEST TRACKING
         # ====================================================
 
         failed_requests = []
+
+        failed_api_requests = []
+
+
+        # ====================================================
+        # NETWORK REQUEST FAILED
+        # ====================================================
 
         page.on(
             "requestfailed",
@@ -526,9 +645,74 @@ def run_page(
             )
         )
 
+
+        # ====================================================
+        # API RESPONSE TRACKING
+        # ====================================================
+
+        def handle_api_response(response):
+
+            try:
+
+                request = response.request
+
+                resource_type = (
+                    request.resource_type
+                )
+
+                # Only monitor API-style requests.
+                #
+                # XHR:
+                #   XMLHttpRequest
+                #
+                # FETCH:
+                #   fetch()
+                #
+                if resource_type in (
+                    "xhr",
+                    "fetch",
+                ):
+
+                    status_code = (
+                        response.status
+                    )
+
+                    if status_code != 200:
+
+                        api_error = (
+                            f"{response.url} "
+                            f"[{status_code}]"
+                        )
+
+                        failed_api_requests.append(
+                            api_error
+                        )
+
+                        print(
+                            f"[{page_name}] "
+                            f"API ERROR: "
+                            f"{api_error}"
+                        )
+
+            except Exception as error:
+
+                print(
+                    f"[{page_name}] "
+                    f"API tracking error: "
+                    f"{error}"
+                )
+
+
+        page.on(
+            "response",
+            handle_api_response
+        )
+
+
         screenshot_path = (
             f"{page_name}.png"
         )
+
 
         # ====================================================
         # MAIN TRY
@@ -571,7 +755,10 @@ def run_page(
                     f"Connection failed: {error}"
                 )
 
-                error_message = str(error)
+                error_message = str(
+                    error
+                )
+
 
                 # =============================================
                 # RESET PAGE
@@ -589,6 +776,7 @@ def run_page(
 
                     pass
 
+
                 # =============================================
                 # OFFLINE SCREENSHOT
                 # =============================================
@@ -599,6 +787,7 @@ def run_page(
                     error_message=error_message,
                     screenshot_path=screenshot_path,
                 )
+
 
                 # =============================================
                 # DISCORD
@@ -620,6 +809,7 @@ def run_page(
 
                 return
 
+
             # =================================================
             # WAIT
             # =================================================
@@ -633,6 +823,7 @@ def run_page(
             page.wait_for_timeout(
                 wait_after_load
             )
+
 
             # =================================================
             # CUSTOM PAGE ACTION
@@ -649,6 +840,7 @@ def run_page(
                     page
                 )
 
+
             # =================================================
             # DASHBOARD CHECK
             # =================================================
@@ -663,6 +855,18 @@ def run_page(
                 len(body_text) > 100
             )
 
+
+            # =================================================
+            # REMOVE DUPLICATE API ERRORS
+            # =================================================
+
+            failed_api_requests = list(
+                dict.fromkeys(
+                    failed_api_requests
+                )
+            )
+
+
             # =================================================
             # HEALTH BAR
             # =================================================
@@ -674,7 +878,11 @@ def run_page(
                 failed_requests=len(
                     failed_requests
                 ),
+                failed_api_requests=(
+                    failed_api_requests
+                ),
             )
+
 
             # =================================================
             # RESET SCROLL
@@ -694,6 +902,7 @@ def run_page(
                 1000
             )
 
+
             # =================================================
             # SCREENSHOT
             # =================================================
@@ -707,6 +916,7 @@ def run_page(
                 f"[{page_name}] "
                 f"Screenshot created"
             )
+
 
             # =================================================
             # DISCORD
@@ -726,6 +936,7 @@ def run_page(
                 f"Screenshot sent to Discord"
             )
 
+
         # =====================================================
         # GLOBAL ERROR HANDLER
         # =====================================================
@@ -741,6 +952,7 @@ def run_page(
                 error
             )
 
+
             # =================================================
             # TRY CREATE ERROR SCREENSHOT
             # =================================================
@@ -753,6 +965,7 @@ def run_page(
                     error_message=error_message,
                     screenshot_path=screenshot_path,
                 )
+
 
                 # =============================================
                 # SEND ERROR TO DISCORD
@@ -782,9 +995,7 @@ def run_page(
 
             raise
 
-        # =====================================================
         # CLEANUP
-        # =====================================================
 
         finally:
 
@@ -795,6 +1006,7 @@ def run_page(
                 os.remove(
                     screenshot_path
                 )
+
 
             if context:
 
