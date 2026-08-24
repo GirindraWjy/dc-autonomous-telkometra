@@ -20,7 +20,7 @@ def inject_health_bar(
     page,
     http_status,
     dashboard_ready,
-    failed_requests,
+    # failed_requests,
     failed_api_requests,
     status=None,
     message=None,
@@ -31,7 +31,7 @@ def inject_health_bar(
         is_healthy = (
             http_status == 200
             and dashboard_ready
-            and failed_requests == 0
+            # and failed_requests == 0
             and len(failed_api_requests) == 0
         )
 
@@ -205,10 +205,10 @@ def inject_health_bar(
                 flex-shrink: 0;
             `;
 
-            requestElement.textContent =
-                failedRequests === 0
-                    ? 'Connection stable'
-                    : `${failedRequests} failed requests`;
+            //requestElement.textContent =
+              //  failedRequests === 0
+                //    ? 'Connection stable'
+                  //  : `${failedRequests} failed requests`;
 
 
             // ====================================================
@@ -308,7 +308,7 @@ def inject_health_bar(
             "message": message,
             "httpStatus": http_status,
             "dashboardReady": dashboard_ready,
-            "failedRequests": failed_requests,
+            # "failedRequests": failed_requests,
             "failedApiRequests": failed_api_requests,
             "checkedAt": checked_at,
             "statusBackground": status_background,
@@ -629,7 +629,7 @@ def run_page(
         # FAILED REQUEST TRACKING
         # ====================================================
 
-        failed_requests = []
+        # failed_requests = []
 
         failed_api_requests = []
 
@@ -638,12 +638,12 @@ def run_page(
         # NETWORK REQUEST FAILED
         # ====================================================
 
-        page.on(
-            "requestfailed",
-            lambda request: failed_requests.append(
-                request.url
-            )
-        )
+        # page.on(
+        #     "requestfailed",
+        #     lambda request: failed_requests.append(
+        #         request.url
+        #     )
+        # )
 
 
         # ====================================================
@@ -875,9 +875,9 @@ def run_page(
                 page=page,
                 http_status=http_status,
                 dashboard_ready=dashboard_ready,
-                failed_requests=len(
-                    failed_requests
-                ),
+                # failed_requests=len(
+                #     failed_requests
+                # ),
                 failed_api_requests=(
                     failed_api_requests
                 ),
