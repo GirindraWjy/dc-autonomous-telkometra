@@ -1,3 +1,5 @@
 python-dotenv
 playwright
 requests
+paramiko
+Pillow

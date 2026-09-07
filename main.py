@@ -11,50 +11,56 @@ WIB = timezone(
     timedelta(hours=7)
 )
 
-def load_pages():
+def load_modules():
 
-    pages = []
+    modules = []
 
-    page_directory = "page"
+    directories = [
+        "page",
+        "server"
+    ]
 
-    if not os.path.exists(page_directory):
-        raise FileNotFoundError(
-            f"Folder '{page_directory}' tidak ditemukan."
-        )
+    for directory in directories:
 
-    for filename in os.listdir(page_directory):
-
-        if not filename.endswith(".py"):
+        if not os.path.exists(directory):
             continue
 
-        if filename == "__init__.py":
-            continue
+        for filename in os.listdir(directory):
 
-        path = os.path.join(
-            page_directory,
-            filename
-        )
+            if not filename.endswith(".py"):
+                continue
 
-        module_name = filename[:-3]
+            if filename == "__init__.py":
+                continue
 
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            path
-        )
+            path = os.path.join(
+                directory,
+                filename
+            )
 
-        if spec is None or spec.loader is None:
-            continue
+            module_name = (
+                f"{directory}_{filename[:-3]}"
+            )
 
-        module = importlib.util.module_from_spec(
-            spec
-        )
+            spec = importlib.util.spec_from_file_location(
+                module_name,
+                path
+            )
 
-        spec.loader.exec_module(module)
+            if spec is None or spec.loader is None:
+                continue
 
-        if hasattr(module, "run"):
-            pages.append(module)
+            module = importlib.util.module_from_spec(
+                spec
+            )
 
-    return pages
+            spec.loader.exec_module(module)
+
+            if hasattr(module, "run"):
+
+                modules.append(module)
+
+    return modules
 
 
 def now_wib():
@@ -174,7 +180,7 @@ def main():
         f"{now_wib().strftime('%d-%m-%Y %H:%M:%S WIB')}"
     )
 
-    pages = load_pages()
+    pages = load_modules()
 
     print(
         f"Loaded {len(pages)} page(s)"
@@ -233,43 +239,56 @@ if __name__ == "__main__":
 # # LOAD PAGE
 # # =========================================================
 
-# def load_pages():
+# def load_modules():
 
-#     pages = []
+#     modules = []
 
-#     page_directory = "page"
+#     directories = [
+#         "page",
+#         "server"
+#     ]
 
-#     for filename in os.listdir(page_directory):
+#     for directory in directories:
 
-#         if not filename.endswith(".py"):
+#         if not os.path.exists(directory):
 #             continue
 
-#         if filename == "__init__.py":
-#             continue
+#         for filename in os.listdir(directory):
 
-#         path = os.path.join(
-#             page_directory,
-#             filename
-#         )
+#             if not filename.endswith(".py"):
+#                 continue
 
-#         module_name = filename[:-3]
+#             if filename == "__init__.py":
+#                 continue
 
-#         spec = importlib.util.spec_from_file_location(
-#             module_name,
-#             path
-#         )
+#             path = os.path.join(
+#                 directory,
+#                 filename
+#             )
 
-#         if spec is None or spec.loader is None:
-#             continue
+#             module_name = (
+#                 f"{directory}_{filename[:-3]}"
+#             )
 
-#         module = importlib.util.module_from_spec(spec)
+#             spec = importlib.util.spec_from_file_location(
+#                 module_name,
+#                 path
+#             )
 
-#         spec.loader.exec_module(module)
+#             if spec is None or spec.loader is None:
+#                 continue
 
-#         if hasattr(module, "run"):
-#             pages.append(module)
+#             module = importlib.util.module_from_spec(
+#                 spec
+#             )
 
-#     return pages
+#             spec.loader.exec_module(module)
+
+#             if hasattr(module, "run"):
+
+#                 modules.append(module)
+
+#     return modules
 
 
 # # =========================================================
@@ -282,7 +301,7 @@ if __name__ == "__main__":
 #     print("DC Autonomous Telkometra")
 #     print("==========================================")
 
-#     pages = load_pages()
+#     pages = load_modules()
 
 #     print(
 #         f"Loaded {len(pages)} page(s)"
