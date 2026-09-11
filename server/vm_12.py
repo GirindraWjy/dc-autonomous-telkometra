@@ -6,6 +6,11 @@ import paramiko
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
+from rc_analyst.infra_rc_analyst import (
+    analyze,
+    format_diagnostics,
+)
+
 from core.server_ss_template import render_terminal
 
 
@@ -31,33 +36,48 @@ def get_cpu_usage(ssh):
     )
 
     output = (
-        stdout.read()
-        .decode("utf-8", errors="replace")
+        stdout
+        .read()
+        .decode(
+            "utf-8",
+            errors="replace",
+        )
     )
 
     match = re.search(
         r"([\d.,]+)\s*id",
-        output
+        output,
     )
 
     if not match:
         return None
 
     idle = float(
-        match.group(1).replace(",", ".")
+        match.group(1).replace(
+            ",",
+            ".",
+        )
     )
 
-    return round(100 - idle, 1)
+    return round(
+        100 - idle,
+        1,
+    )
 
 
 def get_ram_usage(ssh):
     _, stdout, _ = ssh.exec_command(
-        "free | awk '/Mem:/ {printf \"%.1f\", ($3/$2)*100}'"
+        'free | awk \'/Mem:/ '
+        '{printf "%.1f", ($3/$2)*100}\''
     )
 
     output = (
-        stdout.read()
-        .decode("utf-8", errors="replace")
+        stdout
+        .read()
+        .decode(
+            "utf-8",
+            errors="replace",
+        )
         .strip()
     )
 
@@ -69,12 +89,18 @@ def get_ram_usage(ssh):
 
 def get_disk_usage(ssh):
     _, stdout, _ = ssh.exec_command(
-        "df -P / | awk 'NR==2 {gsub(/%/,\"\",$5); print $5}'"
+        "df -P / | "
+        "awk 'NR==2 "
+        "{gsub(/%/,\"\",$5); print $5}'"
     )
 
     output = (
-        stdout.read()
-        .decode("utf-8", errors="replace")
+        stdout
+        .read()
+        .decode(
+            "utf-8",
+            errors="replace",
+        )
         .strip()
     )
 
@@ -83,49 +109,12 @@ def get_disk_usage(ssh):
     except ValueError:
         return None
 
-def get_root_causes(cpu, ram, disk):
-    causes = []
 
-    if cpu is not None and cpu > 80:
-        causes.append(
-            f"CPU Usage is above 80% ({cpu:.1f}%)"
-        )
-
-    if ram is not None and ram > 80:
-        causes.append(
-            f"RAM Usage is above 80% ({ram:.1f}%)"
-        )
-
-    if disk is not None and disk > 80:
-        causes.append(
-            f"Disk Usage is above 80% ({disk:.1f}%)"
-        )
-
-    if not causes:
-        causes.append(
-            "No critical resource detected"
-        )
-
-    return causes
-
-
-def determine_status(cpu, ram, disk):
-    usages = [cpu, ram, disk]
-
-    if any(
-        value is not None and value > 80
-        for value in usages
-    ):
-        return "CRITICAL 🔴"
-
-    return "HEALTHY 🟢"
-
-
-def format_usage(name, value):
+def format_usage(label, value):
     if value is None:
-        return f"{name}: N/A"
+        return f"{label}: UNKNOWN"
 
-    return f"{name}: {value:.1f}%"
+    return f"{label}: {value:.1f}%"
 
 
 def run():
@@ -140,7 +129,7 @@ def run():
     )
 
     webhook_url = os.getenv(
-        "DISCORD_WEBHOOK_URL"
+        "INFRA_DISCORD_WEBHOOK_URL"
     )
 
     if not username:
@@ -155,7 +144,7 @@ def run():
 
     if not webhook_url:
         raise ValueError(
-            "DISCORD_WEBHOOK_URL belum ditemukan di .env"
+            "INFRA_DISCORD_WEBHOOK_URL belum ditemukan di .env"
         )
 
     screenshot_path = "server12.png"
@@ -167,6 +156,7 @@ def run():
     )
 
     output_sections = []
+    command_results = []
 
     try:
         print(
@@ -186,40 +176,45 @@ def run():
 
         for index, command in enumerate(
             COMMANDS,
-            start=1
+            start=1,
         ):
             print(
-                f"[{PAGE_NAME}] "
-                f"Running command {index}: "
-                f"{command}"
+                f"[{PAGE_NAME}] Running command {index}: {command}"
             )
 
-            stdin, stdout, stderr = (
-                ssh.exec_command(
-                    command,
-                    timeout=60
-                )
+            stdin, stdout, stderr = ssh.exec_command(
+                command,
+                timeout=60,
             )
 
             stdout_text = (
-                stdout.read()
+                stdout
+                .read()
                 .decode(
                     "utf-8",
-                    errors="replace"
+                    errors="replace",
                 )
             )
 
             stderr_text = (
-                stderr.read()
+                stderr
+                .read()
                 .decode(
                     "utf-8",
-                    errors="replace"
+                    errors="replace",
                 )
             )
 
             exit_code = (
-                stdout.channel
-                .recv_exit_status()
+                stdout.channel.recv_exit_status()
+            )
+
+            command_results.append(
+                {
+                    "command": command,
+                    "exit_code": exit_code,
+                    "stderr": stderr_text,
+                }
             )
 
             output_sections.append(
@@ -246,14 +241,12 @@ def run():
             output_sections.append("")
 
             print(
-                f"[{PAGE_NAME}] "
-                f"Command {index} completed "
+                f"[{PAGE_NAME}] Command {index} completed "
                 f"(exit code: {exit_code})"
             )
 
         print(
-            f"[{PAGE_NAME}] "
-            f"Checking server resources..."
+            f"[{PAGE_NAME}] Checking server resources..."
         )
 
         cpu_usage = get_cpu_usage(ssh)
@@ -272,16 +265,26 @@ def run():
             f"[{PAGE_NAME}] Disk: {disk_usage}%"
         )
 
-        status = determine_status(
-            cpu=cpu_usage,
-            ram=ram_usage,
-            disk=disk_usage
+        print(
+            f"[{PAGE_NAME}] Running infrastructure RCA..."
         )
 
-        root_causes = get_root_causes(
+        analysis = analyze(
             cpu=cpu_usage,
             ram=ram_usage,
-            disk=disk_usage
+            disk=disk_usage,
+            command_results=command_results,
+            check_transaction=False,
+            ssh=ssh,
+        )
+
+        status = analysis["status"]
+        root_causes = analysis["root_causes"]
+        diagnostics = analysis["diagnostics"]
+
+        diagnostic_text = format_diagnostics(
+            diagnostics,
+            max_lines=30,
         )
 
         checked_at = datetime.now(
@@ -291,7 +294,7 @@ def run():
         )
 
         output_sections.append(
-            "----------------------------------------"
+            "========================================"
         )
 
         output_sections.append(
@@ -301,21 +304,21 @@ def run():
         output_sections.append(
             format_usage(
                 "CPU Usage",
-                cpu_usage
+                cpu_usage,
             )
         )
 
         output_sections.append(
             format_usage(
                 "RAM Usage",
-                ram_usage
+                ram_usage,
             )
         )
 
         output_sections.append(
             format_usage(
                 "Disk Usage",
-                disk_usage
+                disk_usage,
             )
         )
 
@@ -323,9 +326,10 @@ def run():
             f"Status: {status}"
         )
 
-        if status == "CRITICAL":
+        if root_causes:
+            output_sections.append("")
             output_sections.append(
-                "CRITICAL ROOT CAUSE"
+                "ROOT CAUSE"
             )
 
             for cause in root_causes:
@@ -333,6 +337,7 @@ def run():
                     f"- {cause}"
                 )
 
+        output_sections.append("")
         output_sections.append(
             f"Checked: {checked_at}"
         )
@@ -345,31 +350,78 @@ def run():
             title=PAGE_NAME,
             host=HOST,
             output=terminal_output,
-            output_path=screenshot_path
+            output_path=screenshot_path,
         )
 
-        discord_content = (
-            f"🖥️ **{PAGE_NAME}**\n"
-            f"Status: **{status}**\n"
-            f"{format_usage('CPU Usage', cpu_usage)}\n"
-            f"{format_usage('RAM Usage', ram_usage)}\n"
-            f"{format_usage('Disk Usage', disk_usage)}\n"
+        print(
+            f"[{PAGE_NAME}] Screenshot created"
         )
 
-        if status == "CRITICAL 🔴":
-            discord_content += (
-                f"Root Cause: **{'; '.join(root_causes)}**\n"
+        discord_lines = [
+            f"🖥️ **{PAGE_NAME}**",
+            f"Status: **{status}**",
+            format_usage(
+                "CPU Usage",
+                cpu_usage,
+            ),
+            format_usage(
+                "RAM Usage",
+                ram_usage,
+            ),
+            format_usage(
+                "Disk Usage",
+                disk_usage,
+            ),
+        ]
+
+        if root_causes:
+            discord_lines.append("")
+            discord_lines.append(
+                "**Critical Root Cause:**"
             )
 
-        discord_content += (
+            for cause in root_causes:
+                discord_lines.append(
+                    f"• {cause}"
+                )
+
+        if diagnostic_text:
+            diagnostic_for_discord = format_diagnostics(
+                diagnostics,
+                max_lines=15,
+            )
+
+            discord_lines.append("")
+            discord_lines.append(
+                "**Diagnostic:**"
+            )
+            discord_lines.append(
+                "```text"
+            )
+            discord_lines.append(
+                diagnostic_for_discord
+            )
+            discord_lines.append(
+                "```"
+            )
+
+        discord_lines.append("")
+        discord_lines.append(
             f"Checked: {checked_at}"
+        )
+
+        discord_content = "\n".join(
+            discord_lines
+        )
+
+        print(
+            f"[{PAGE_NAME}] Sending screenshot to Discord..."
         )
 
         with open(
             screenshot_path,
-            "rb"
+            "rb",
         ) as image:
-
             response = requests.post(
                 webhook_url,
                 data={
@@ -379,15 +431,15 @@ def run():
                     "file": (
                         screenshot_path,
                         image,
-                        "image/png"
+                        "image/png",
                     )
                 },
-                timeout=120
+                timeout=120,
             )
 
         if response.status_code not in (
             200,
-            204
+            204,
         ):
             raise Exception(
                 f"Discord error: "
@@ -396,14 +448,12 @@ def run():
             )
 
         print(
-            f"[{PAGE_NAME}] "
-            f"Screenshot sent to Discord"
+            f"[{PAGE_NAME}] Screenshot sent to Discord"
         )
 
     except Exception as error:
         print(
-            f"[{PAGE_NAME}] ERROR: "
-            f"{error}"
+            f"[{PAGE_NAME}] ERROR: {error}"
         )
         raise
 
@@ -421,8 +471,7 @@ def run():
             )
 
         print(
-            f"[{PAGE_NAME}] "
-            f"SSH connection closed"
+            f"[{PAGE_NAME}] SSH connection closed"
         )
 
 
