@@ -6,15 +6,13 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
-
-WIB = timezone(
-    timedelta(hours=7)
-)
+WIB = timezone(timedelta(hours=7))
 
 
 # ============================================================
 # HEALTH BAR
 # ============================================================
+
 
 def inject_health_bar(
     page,
@@ -51,11 +49,7 @@ def inject_health_bar(
 
         status_background = "#9f1239"
 
-    checked_at = datetime.now(
-        WIB
-    ).strftime(
-        "%d %b %Y %H:%M WIB"
-    )
+    checked_at = datetime.now(WIB).strftime("%d %b %Y %H:%M WIB")
 
     page.evaluate(
         """
@@ -312,7 +306,7 @@ def inject_health_bar(
             "failedApiRequests": failed_api_requests,
             "checkedAt": checked_at,
             "statusBackground": status_background,
-        }
+        },
     )
 
     return {
@@ -325,6 +319,7 @@ def inject_health_bar(
 # ============================================================
 # DISCORD
 # ============================================================
+
 
 def send_discord(
     webhook_url,
@@ -342,7 +337,6 @@ def send_discord(
 
         response = requests.post(
             webhook_url,
-
             data={
                 "content": (
                     f"📊 **{page_name}**\n"
@@ -351,17 +345,13 @@ def send_discord(
                     f"Checked: {checked_at}"
                 )
             },
-
             files={
                 "file": (
-                    os.path.basename(
-                        screenshot_path
-                    ),
+                    os.path.basename(screenshot_path),
                     image,
                     "image/png",
                 )
             },
-
             timeout=120,
         )
 
@@ -371,15 +361,14 @@ def send_discord(
     ):
 
         raise Exception(
-            f"Discord error: "
-            f"{response.status_code} "
-            f"{response.text}"
+            f"Discord error: " f"{response.status_code} " f"{response.text}"
         )
 
 
 # ============================================================
 # OFFLINE SCREENSHOT
 # ============================================================
+
 
 def create_offline_screenshot(
     page,
@@ -388,11 +377,7 @@ def create_offline_screenshot(
     screenshot_path,
 ):
 
-    checked_at = datetime.now(
-        WIB
-    ).strftime(
-        "%d %b %Y %H:%M WIB"
-    )
+    checked_at = datetime.now(WIB).strftime("%d %b %Y %H:%M WIB")
 
     html = f"""
     <!DOCTYPE html>
@@ -493,20 +478,11 @@ def create_offline_screenshot(
     </html>
     """
 
-    page.set_content(
-        html,
-        wait_until="commit",
-        timeout=10000
-    )
+    page.set_content(html, wait_until="commit", timeout=10000)
 
-    page.wait_for_timeout(
-        500
-    )
+    page.wait_for_timeout(500)
 
-    page.screenshot(
-        path=screenshot_path,
-        full_page=False
-    )
+    page.screenshot(path=screenshot_path, full_page=False)
 
     return checked_at
 
@@ -515,6 +491,7 @@ def create_offline_screenshot(
 # RUN PAGE
 # ============================================================
 
+
 def run_page(
     page_name,
     url,
@@ -522,405 +499,228 @@ def run_page(
     before_screenshot=None,
     persistent_session_dir=None,
 ):
-
     load_dotenv()
 
-    webhook_url = os.getenv(
-        "DISCORD_WEBHOOK_URL"
-    )
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
-    width = int(
-        os.getenv(
-            "SCREENSHOT_WIDTH",
-            "1365"
-        )
-    )
-
-    height = int(
-        os.getenv(
-            "SCREENSHOT_HEIGHT",
-            "768"
-        )
-    )
+    width = int(os.getenv("SCREENSHOT_WIDTH", "1365"))
+    height = int(os.getenv("SCREENSHOT_HEIGHT", "768"))
 
     if not webhook_url:
+        raise ValueError("DISCORD_WEBHOOK_URL belum ditemukan di .env")
 
-        raise ValueError(
-            "DISCORD_WEBHOOK_URL belum ditemukan di .env"
-        )
-
-
-    # ========================================================
-    # PLAYWRIGHT
-    # ========================================================
+    screenshot_path = f"{page_name}.png"
 
     with sync_playwright() as playwright:
-
         browser = None
         context = None
         page = None
 
+        try:
+            # ====================================================
+            # CREATE BROWSER CONTEXT
+            # ====================================================
 
-        # ====================================================
-        # CREATE BROWSER CONTEXT
-        # ====================================================
+            if persistent_session_dir:
+                print(
+                    f"[{page_name}] Using persistent session: "
+                    f"{persistent_session_dir}"
+                )
 
-        if persistent_session_dir:
+                os.makedirs(persistent_session_dir, exist_ok=True)
 
-            print(
-                f"[{page_name}] "
-                f"Using persistent session: "
-                f"{persistent_session_dir}"
-            )
-
-            os.makedirs(
-                persistent_session_dir,
-                exist_ok=True
-            )
-
-            context = (
-                playwright.chromium
-                .launch_persistent_context(
+                context = playwright.chromium.launch_persistent_context(
                     user_data_dir=persistent_session_dir,
-
                     headless=True,
-
                     viewport={
                         "width": width,
                         "height": height,
                     },
-
                     ignore_https_errors=True,
                 )
-            )
 
-            if context.pages:
-
-                page = context.pages[0]
+                if context.pages:
+                    page = context.pages[0]
+                else:
+                    page = context.new_page()
 
             else:
+                print(f"[{page_name}] Using temporary browser session")
+
+                browser = playwright.chromium.launch(headless=True)
+
+                context = browser.new_context(
+                    viewport={
+                        "width": width,
+                        "height": height,
+                    },
+                    ignore_https_errors=True,
+                )
 
                 page = context.new_page()
 
-        else:
+            # ====================================================
+            # API RESPONSE TRACKING
+            # ====================================================
 
-            print(
-                f"[{page_name}] "
-                f"Using temporary browser session"
-            )
+            failed_api_requests = []
 
-            browser = playwright.chromium.launch(
-                headless=True
-            )
+            def handle_api_response(response):
+                try:
+                    request = response.request
+                    resource_type = request.resource_type
 
-            context = browser.new_context(
-                viewport={
-                    "width": width,
-                    "height": height,
-                },
+                    if resource_type in ("xhr", "fetch"):
+                        status_code = response.status
 
-                ignore_https_errors=True,
-            )
+                        if status_code != 200:
+                            api_error = f"{response.url} [{status_code}]"
 
-            page = context.new_page()
+                            failed_api_requests.append(api_error)
 
+                            print(f"[{page_name}] API ERROR: " f"{api_error}")
 
-        # ====================================================
-        # FAILED REQUEST TRACKING
-        # ====================================================
+                except Exception as error:
+                    print(f"[{page_name}] API tracking error: " f"{error}")
 
-        # failed_requests = []
+            page.on("response", handle_api_response)
 
-        failed_api_requests = []
-
-
-        # ====================================================
-        # NETWORK REQUEST FAILED
-        # ====================================================
-
-        # page.on(
-        #     "requestfailed",
-        #     lambda request: failed_requests.append(
-        #         request.url
-        #     )
-        # )
-
-
-        # ====================================================
-        # API RESPONSE TRACKING
-        # ====================================================
-
-        def handle_api_response(response):
-
-            try:
-
-                request = response.request
-
-                resource_type = (
-                    request.resource_type
-                )
-
-                # Only monitor API-style requests.
-                #
-                # XHR:
-                #   XMLHttpRequest
-                #
-                # FETCH:
-                #   fetch()
-                #
-                if resource_type in (
-                    "xhr",
-                    "fetch",
-                ):
-
-                    status_code = (
-                        response.status
-                    )
-
-                    if status_code != 200:
-
-                        api_error = (
-                            f"{response.url} "
-                            f"[{status_code}]"
-                        )
-
-                        failed_api_requests.append(
-                            api_error
-                        )
-
-                        print(
-                            f"[{page_name}] "
-                            f"API ERROR: "
-                            f"{api_error}"
-                        )
-
-            except Exception as error:
-
-                print(
-                    f"[{page_name}] "
-                    f"API tracking error: "
-                    f"{error}"
-                )
-
-
-        page.on(
-            "response",
-            handle_api_response
-        )
-
-
-        screenshot_path = (
-            f"{page_name}.png"
-        )
-
-
-        # ====================================================
-        # MAIN TRY
-        # ====================================================
-
-        try:
-
-            # =================================================
+            # ====================================================
             # OPEN PAGE
-            # =================================================
+            # ====================================================
 
-            print(
-                f"[{page_name}] "
-                f"Opening {url}"
-            )
+            print(f"[{page_name}] Opening {url}")
 
             try:
-
                 response = page.goto(
                     url,
                     wait_until="domcontentloaded",
                     timeout=120000,
                 )
 
-                http_status = (
-                    response.status
-                    if response
-                    else 0
-                )
+                http_status = response.status if response else 0
 
-                print(
-                    f"[{page_name}] "
-                    f"HTTP status: {http_status}"
-                )
+                print(f"[{page_name}] HTTP status: {http_status}")
+
+                # HTTP error juga dianggap gagal.
+                if http_status >= 400 or http_status == 0:
+                    raise RuntimeError(f"Dashboard returned HTTP {http_status}")
 
             except Exception as error:
+                print(f"[{page_name}] Connection failed: {error}")
 
-                print(
-                    f"[{page_name}] "
-                    f"Connection failed: {error}"
-                )
+                error_message = str(error)
 
-                error_message = str(
-                    error
-                )
-
-
-                # =============================================
-                # RESET PAGE
-                # =============================================
-
+                # Reset page; jangan biarkan error navigasi
+                # menghalangi proses laporan offline.
                 try:
-
                     page.goto(
                         "about:blank",
                         wait_until="commit",
-                        timeout=10000
+                        timeout=10000,
                     )
-
                 except Exception:
-
                     pass
 
+                # Buat screenshot dan kirim notifikasi offline.
+                # Kegagalan pada proses ini tidak boleh mengubah
+                # status dashboard menjadi sukses.
+                try:
+                    checked_at = create_offline_screenshot(
+                        page=page,
+                        page_name=page_name,
+                        error_message=error_message,
+                        screenshot_path=screenshot_path,
+                    )
 
-                # =============================================
-                # OFFLINE SCREENSHOT
-                # =============================================
+                    send_discord(
+                        webhook_url=webhook_url,
+                        page_name=page_name,
+                        screenshot_path=screenshot_path,
+                        status="OFFLINE",
+                        checked_at=checked_at,
+                        message="Dashboard is unreachable",
+                    )
 
-                checked_at = create_offline_screenshot(
-                    page=page,
-                    page_name=page_name,
-                    error_message=error_message,
-                    screenshot_path=screenshot_path,
-                )
+                    print(f"[{page_name}] " f"Offline report sent to Discord")
 
+                except Exception as report_error:
+                    print(
+                        f"[{page_name}] "
+                        f"Failed to create/send offline report: "
+                        f"{report_error}"
+                    )
 
-                # =============================================
-                # DISCORD
-                # =============================================
-
-                send_discord(
-                    webhook_url=webhook_url,
-                    page_name=page_name,
-                    screenshot_path=screenshot_path,
-                    status="OFFLINE",
-                    checked_at=checked_at,
-                    message="Dashboard is unreachable",
-                )
-
-                print(
-                    f"[{page_name}] "
-                    f"Offline report sent to Discord"
-                )
-
+                # WAJIB: tandai gagal supaya orchestrator retry.
                 return False
 
+            # ====================================================
+            # WAIT AFTER LOAD
+            # ====================================================
 
-            # =================================================
-            # WAIT
-            # =================================================
+            print(f"[{page_name}] Waiting " f"{wait_after_load / 1000:.0f} seconds...")
 
-            print(
-                f"[{page_name}] "
-                f"Waiting "
-                f"{wait_after_load / 1000:.0f} seconds..."
-            )
+            page.wait_for_timeout(wait_after_load)
 
-            page.wait_for_timeout(
-                wait_after_load
-            )
-
-
-            # =================================================
+            # ====================================================
             # CUSTOM PAGE ACTION
-            # =================================================
+            # ====================================================
 
             if before_screenshot:
+                print(f"[{page_name}] Running custom page action...")
 
-                print(
-                    f"[{page_name}] "
-                    f"Running custom page action..."
-                )
+                before_screenshot(page)
 
-                before_screenshot(
-                    page
-                )
-
-
-            # =================================================
+            # ====================================================
             # DASHBOARD CHECK
-            # =================================================
+            # ====================================================
 
-            body_text = page.locator(
-                "body"
-            ).inner_text(
-                timeout=30000
-            ).strip()
+            body_text = page.locator("body").inner_text(timeout=30000).strip()
 
-            dashboard_ready = (
-                len(body_text) > 100
-            )
+            dashboard_ready = len(body_text) > 100
 
+            # Hapus API error duplikat.
+            failed_api_requests = list(dict.fromkeys(failed_api_requests))
 
-            # =================================================
-            # REMOVE DUPLICATE API ERRORS
-            # =================================================
-
-            failed_api_requests = list(
-                dict.fromkeys(
-                    failed_api_requests
-                )
-            )
-
-
-            # =================================================
+            # ====================================================
             # HEALTH BAR
-            # =================================================
+            # ====================================================
 
             health = inject_health_bar(
                 page=page,
                 http_status=http_status,
                 dashboard_ready=dashboard_ready,
-                # failed_requests=len(
-                #     failed_requests
-                # ),
-                failed_api_requests=(
-                    failed_api_requests
-                ),
+                failed_api_requests=failed_api_requests,
             )
 
-
-            # =================================================
+            # ====================================================
             # RESET SCROLL
-            # =================================================
+            # ====================================================
 
-            page.evaluate(
-                """
+            page.evaluate("""
                 () => {
                     window.scrollTo(0, 0);
                     document.documentElement.scrollTop = 0;
                     document.body.scrollTop = 0;
                 }
-                """
-            )
+                """)
 
-            page.wait_for_timeout(
-                1000
-            )
+            page.wait_for_timeout(1000)
 
-
-            # =================================================
+            # ====================================================
             # SCREENSHOT
-            # =================================================
+            # ====================================================
 
             page.screenshot(
                 path=screenshot_path,
                 full_page=False,
             )
 
-            print(
-                f"[{page_name}] "
-                f"Screenshot created"
-            )
+            print(f"[{page_name}] Screenshot created")
 
-
-            # =================================================
-            # DISCORD
-            # =================================================
+            # ====================================================
+            # SEND NORMAL REPORT
+            # ====================================================
 
             send_discord(
                 webhook_url=webhook_url,
@@ -931,47 +731,27 @@ def run_page(
                 message=health["message"],
             )
 
-            print(
-                f"[{page_name}] "
-                f"Screenshot sent to Discord"
-            )
+            print(f"[{page_name}] Screenshot sent to Discord")
+
             return True
-            
 
-
-        # =====================================================
+        # ========================================================
         # GLOBAL ERROR HANDLER
-        # =====================================================
+        # ========================================================
 
         except Exception as error:
+            print(f"[{page_name}] ERROR: {error}")
 
-            print(
-                f"[{page_name}] "
-                f"ERROR: {error}"
-            )
+            error_message = str(error)
 
-            error_message = str(
-                error
-            )
-
-
-            # =================================================
-            # TRY CREATE ERROR SCREENSHOT
-            # =================================================
-
+            # Coba kirim laporan error.
             try:
-
                 checked_at = create_offline_screenshot(
                     page=page,
                     page_name=page_name,
                     error_message=error_message,
                     screenshot_path=screenshot_path,
                 )
-
-
-                # =============================================
-                # SEND ERROR TO DISCORD
-                # =============================================
 
                 send_discord(
                     webhook_url=webhook_url,
@@ -982,39 +762,35 @@ def run_page(
                     message=error_message,
                 )
 
-                print(
-                    f"[{page_name}] "
-                    f"Error report sent to Discord"
-                )
+                print(f"[{page_name}] Error report sent to Discord")
 
-            except Exception as discord_error:
+            except Exception as report_error:
+                print(f"[{page_name}] Failed to send error report: " f"{report_error}")
 
-                print(
-                    f"[{page_name}] "
-                    f"Failed to send error report: "
-                    f"{discord_error}"
-                )
-
+            # Teruskan error supaya orchestrator mengetahui kegagalan.
             raise
 
+        # ========================================================
         # CLEANUP
+        # ========================================================
 
         finally:
+            try:
+                if os.path.exists(screenshot_path):
+                    os.remove(screenshot_path)
+            except OSError as cleanup_error:
+                print(f"[{page_name}] Screenshot cleanup failed: " f"{cleanup_error}")
 
-            if os.path.exists(
-                screenshot_path
-            ):
+            try:
+                if context:
+                    context.close()
 
-                os.remove(
-                    screenshot_path
-                )
+                    print(f"[{page_name}] Browser context closed")
+            except Exception as cleanup_error:
+                print(f"[{page_name}] Context cleanup failed: " f"{cleanup_error}")
 
-
-            if context:
-
-                context.close()
-
-                print(
-                    f"[{page_name}] "
-                    f"Browser context closed"
-                )
+            try:
+                if browser:
+                    browser.close()
+            except Exception as cleanup_error:
+                print(f"[{page_name}] Browser cleanup failed: " f"{cleanup_error}")
