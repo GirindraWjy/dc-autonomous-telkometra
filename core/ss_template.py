@@ -807,7 +807,7 @@ def run_page(
                     f"Offline report sent to Discord"
                 )
 
-                return
+                return False
 
 
             # =================================================
@@ -935,6 +935,8 @@ def run_page(
                 f"[{page_name}] "
                 f"Screenshot sent to Discord"
             )
+            return True
+            
 
 
         # =====================================================
