@@ -173,6 +173,11 @@ def run():
                 }
             )
 
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Command gagal: {command} " f"(exit code: {exit_code})"
+                )
+
             output_sections.append(f"$ {command}")
 
             if stdout_text.strip():
@@ -341,6 +346,7 @@ def run():
             )
 
         print(f"[{PAGE_NAME}] Screenshot sent to Discord")
+        return True
 
     except Exception as error:
         print(f"[{PAGE_NAME}] ERROR: {error}")

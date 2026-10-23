@@ -223,6 +223,10 @@ def run():
                     "stderr": stderr_text,
                 }
             )
+            if exit_code != 0:
+                raise RuntimeError(
+                    f"Command gagal: {command} " f"(exit code: {exit_code})"
+                )
 
             if "journalctl" in command:
                 journal_output = stdout_text
@@ -407,6 +411,7 @@ def run():
             )
 
         print(f"[{PAGE_NAME}] Screenshot sent to Discord")
+        return True
 
     except Exception as error:
         print(f"[{PAGE_NAME}] ERROR: {error}")

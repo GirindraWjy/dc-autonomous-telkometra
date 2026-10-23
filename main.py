@@ -1,4 +1,3 @@
-
 import os
 import time
 import importlib.util
@@ -11,7 +10,7 @@ load_dotenv()
 WIB = timezone(timedelta(hours=7))
 
 RETRY_INTERVAL = timedelta(minutes=10)
-CHECK_INTERVAL = 5  
+CHECK_INTERVAL = 5
 
 
 def now_wib():
@@ -35,9 +34,7 @@ def load_modules():
             path = os.path.join(directory, filename)
             module_name = f"{directory}_{filename[:-3]}"
 
-            spec = importlib.util.spec_from_file_location(
-                module_name, path
-            )
+            spec = importlib.util.spec_from_file_location(module_name, path)
 
             if spec is None or spec.loader is None:
                 continue
@@ -54,12 +51,7 @@ def load_modules():
 def get_next_run():
     now = now_wib()
 
-    next_run = now.replace(
-        hour=1,
-        minute=10,
-        second=0,
-        microsecond=0
-    )
+    next_run = now.replace(hour=1, minute=10, second=0, microsecond=0)
 
     while next_run <= now:
         next_run += timedelta(hours=2)
@@ -87,10 +79,9 @@ def run_pages(pages, report_time, is_retry=False):
         try:
             result = page.run()
 
-            if result is False:
-                raise RuntimeError(
-                    "Page mengembalikan status gagal (False)"
-                )
+            # Hanya True yang dianggap sukses
+            if result is not True:
+                raise RuntimeError(f"Modul mengembalikan status gagal: {result!r}")
 
             print(f"[{name}] SUCCESS")
 
@@ -100,14 +91,11 @@ def run_pages(pages, report_time, is_retry=False):
 
     if failed_pages:
         print(
-            f"{len(failed_pages)} page(s) gagal. "
+            f"{len(failed_pages)} module(s) gagal. "
             f"Akan dicoba ulang dalam {RETRY_INTERVAL}."
         )
     else:
-        print(
-            f"Semua page berhasil untuk laporan "
-            f"{report_time:%H:%M WIB}."
-        )
+        print(f"Semua module berhasil untuk laporan " f"{report_time:%H:%M WIB}.")
 
     print("-" * 50)
 
@@ -138,33 +126,24 @@ def main():
     while True:
         now = now_wib()
 
-        due_retries = [
-            item for item in pending_retries
-            if item["retry_at"] <= now
-        ]
+        due_retries = [item for item in pending_retries if item["retry_at"] <= now]
 
-        pending_retries = [
-            item for item in pending_retries
-            if item["retry_at"] > now
-        ]
+        pending_retries = [item for item in pending_retries if item["retry_at"] > now]
 
         for item in due_retries:
-            failed_pages = run_pages(
-                item["pages"],
-                item["report_time"],
-                is_retry=True
-            )
+            failed_pages = run_pages(item["pages"], item["report_time"], is_retry=True)
 
             if failed_pages:
-                pending_retries.append({
-                    "report_time": item["report_time"],
-                    "pages": failed_pages,
-                    "retry_at": now_wib() + RETRY_INTERVAL
-                })
+                pending_retries.append(
+                    {
+                        "report_time": item["report_time"],
+                        "pages": failed_pages,
+                        "retry_at": now_wib() + RETRY_INTERVAL,
+                    }
+                )
             else:
                 print(
-                    f"[RECOVERED] Laporan "
-                    f"{item['report_time']:%H:%M WIB} berhasil."
+                    f"[RECOVERED] Laporan " f"{item['report_time']:%H:%M WIB} berhasil."
                 )
 
         now = now_wib()
@@ -177,17 +156,16 @@ def main():
             while next_run <= now:
                 next_run += timedelta(hours=2)
 
-            failed_pages = run_pages(
-                pages,
-                scheduled_time
-            )
+            failed_pages = run_pages(pages, scheduled_time)
 
             if failed_pages:
-                pending_retries.append({
-                    "report_time": scheduled_time,
-                    "pages": failed_pages,
-                    "retry_at": now_wib() + RETRY_INTERVAL
-                })
+                pending_retries.append(
+                    {
+                        "report_time": scheduled_time,
+                        "pages": failed_pages,
+                        "retry_at": now_wib() + RETRY_INTERVAL,
+                    }
+                )
 
         now = now_wib()
 
@@ -195,7 +173,7 @@ def main():
             f"\rNext scheduled: {next_run:%d-%m %H:%M WIB} | "
             f"Pending retry: {len(pending_retries)}",
             end="",
-            flush=True
+            flush=True,
         )
 
         time.sleep(CHECK_INTERVAL)
