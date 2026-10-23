@@ -13,16 +13,11 @@ from rc_analyst.infra_rc_analyst import (
 
 from core.server_ss_template import render_terminal
 
-
 PAGE_NAME = "Server 8"
 
 HOST = "192.168.120.8"
 
-CURRENT_DIRECTORY = (
-    "ulo_commercial/"
-    "be-dashboard-cp-platform-backup/"
-    "logs"
-)
+CURRENT_DIRECTORY = "ulo_commercial/" "be-dashboard-cp-platform-backup/" "logs"
 
 COMMANDS = [
     "cd ulo_commercial/be-dashboard-cp-platform-backup/logs/",
@@ -34,23 +29,20 @@ COMMANDS = [
     "date",
 ]
 
-WIB = timezone(
-    timedelta(hours=7)
-)
+WIB = timezone(timedelta(hours=7))
 
 
 def get_last_transaction(ssh):
     _, stdout, _ = ssh.exec_command(
-        'journalctl -u daemon_clean_database.service '
+        "journalctl -u daemon_clean_database.service "
         '--since "24 hours ago" '
-        '--no-pager '
+        "--no-pager "
         '| grep "trx_id" '
-        '| tail -n 1'
+        "| tail -n 1"
     )
 
     output = (
-        stdout
-        .read()
+        stdout.read()
         .decode(
             "utf-8",
             errors="replace",
@@ -81,17 +73,11 @@ def get_last_transaction(ssh):
 
 
 def get_cpu_usage(ssh):
-    _, stdout, _ = ssh.exec_command(
-        "top -bn1 | grep 'Cpu(s)'"
-    )
+    _, stdout, _ = ssh.exec_command("top -bn1 | grep 'Cpu(s)'")
 
-    output = (
-        stdout
-        .read()
-        .decode(
-            "utf-8",
-            errors="replace",
-        )
+    output = stdout.read().decode(
+        "utf-8",
+        errors="replace",
     )
 
     match = re.search(
@@ -117,13 +103,11 @@ def get_cpu_usage(ssh):
 
 def get_ram_usage(ssh):
     _, stdout, _ = ssh.exec_command(
-        'free | awk \'/Mem:/ '
-        '{printf "%.1f", ($3/$2)*100}\''
+        "free | awk '/Mem:/ " '{printf "%.1f", ($3/$2)*100}\''
     )
 
     output = (
-        stdout
-        .read()
+        stdout.read()
         .decode(
             "utf-8",
             errors="replace",
@@ -139,14 +123,11 @@ def get_ram_usage(ssh):
 
 def get_disk_usage(ssh):
     _, stdout, _ = ssh.exec_command(
-        "df -P / | "
-        "awk 'NR==2 "
-        "{gsub(/%/,\"\",$5); print $5}'"
+        "df -P / | " "awk 'NR==2 " '{gsub(/%/,"",$5); print $5}\''
     )
 
     output = (
-        stdout
-        .read()
+        stdout.read()
         .decode(
             "utf-8",
             errors="replace",
@@ -170,49 +151,33 @@ def format_usage(label, value):
 def run():
     load_dotenv()
 
-    username = os.getenv(
-        "USN_SERVER_8"
-    )
+    username = os.getenv("USN_SERVER_8")
 
-    password = os.getenv(
-        "PW_SERVER_8"
-    )
+    password = os.getenv("PW_SERVER_8")
 
-    webhook_url = os.getenv(
-        "INFRA_DISCORD_WEBHOOK_URL"
-    )
+    webhook_url = os.getenv("INFRA_DISCORD_WEBHOOK_URL")
 
     if not username:
-        raise ValueError(
-            "USN_SERVER_8 belum ditemukan di .env"
-        )
+        raise ValueError("USN_SERVER_8 belum ditemukan di .env")
 
     if not password:
-        raise ValueError(
-            "PW_SERVER_8 belum ditemukan di .env"
-        )
+        raise ValueError("PW_SERVER_8 belum ditemukan di .env")
 
     if not webhook_url:
-        raise ValueError(
-            "INFRA_DISCORD_WEBHOOK_URL belum ditemukan di .env"
-        )
+        raise ValueError("INFRA_DISCORD_WEBHOOK_URL belum ditemukan di .env")
 
     screenshot_path = "server8.png"
 
     ssh = paramiko.SSHClient()
 
-    ssh.set_missing_host_key_policy(
-        paramiko.AutoAddPolicy()
-    )
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     output_sections = []
     command_results = []
     journal_output = ""
 
     try:
-        print(
-            f"[{PAGE_NAME}] Connecting to {HOST}..."
-        )
+        print(f"[{PAGE_NAME}] Connecting to {HOST}...")
 
         ssh.connect(
             hostname=HOST,
@@ -221,53 +186,35 @@ def run():
             timeout=15,
         )
 
-        print(
-            f"[{PAGE_NAME}] Connected"
-        )
+        print(f"[{PAGE_NAME}] Connected")
 
         for index, command in enumerate(
             COMMANDS,
             start=1,
         ):
-            print(
-                f"[{PAGE_NAME}] Running command {index}: {command}"
-            )
+            print(f"[{PAGE_NAME}] Running command {index}: {command}")
 
             if command.startswith("cd "):
-                full_command = (
-                    f"cd {command[3:]} && pwd"
-                )
+                full_command = f"cd {command[3:]} && pwd"
             else:
-                full_command = (
-                    f"cd {CURRENT_DIRECTORY} && {command}"
-                )
+                full_command = f"cd {CURRENT_DIRECTORY} && {command}"
 
             stdin, stdout, stderr = ssh.exec_command(
                 full_command,
                 timeout=60,
             )
 
-            stdout_text = (
-                stdout
-                .read()
-                .decode(
-                    "utf-8",
-                    errors="replace",
-                )
+            stdout_text = stdout.read().decode(
+                "utf-8",
+                errors="replace",
             )
 
-            stderr_text = (
-                stderr
-                .read()
-                .decode(
-                    "utf-8",
-                    errors="replace",
-                )
+            stderr_text = stderr.read().decode(
+                "utf-8",
+                errors="replace",
             )
 
-            exit_code = (
-                stdout.channel.recv_exit_status()
-            )
+            exit_code = stdout.channel.recv_exit_status()
 
             command_results.append(
                 {
@@ -280,63 +227,39 @@ def run():
             if "journalctl" in command:
                 journal_output = stdout_text
 
-            output_sections.append(
-                f"$ {command}"
-            )
+            output_sections.append(f"$ {command}")
 
             if stdout_text.strip():
-                output_sections.append(
-                    stdout_text.rstrip()
-                )
+                output_sections.append(stdout_text.rstrip())
 
             if stderr_text.strip():
-                output_sections.append(
-                    "[stderr]"
-                )
-                output_sections.append(
-                    stderr_text.rstrip()
-                )
+                output_sections.append("[stderr]")
+                output_sections.append(stderr_text.rstrip())
 
-            output_sections.append(
-                f"[exit code: {exit_code}]"
-            )
+            output_sections.append(f"[exit code: {exit_code}]")
 
             output_sections.append("")
 
             print(
-                f"[{PAGE_NAME}] Command {index} completed "
-                f"(exit code: {exit_code})"
+                f"[{PAGE_NAME}] Command {index} completed " f"(exit code: {exit_code})"
             )
 
-        print(
-            f"[{PAGE_NAME}] Checking server resources..."
-        )
+        print(f"[{PAGE_NAME}] Checking server resources...")
 
         cpu_usage = get_cpu_usage(ssh)
         ram_usage = get_ram_usage(ssh)
         disk_usage = get_disk_usage(ssh)
         last_transaction_dt = get_last_transaction(ssh)
 
-        print(
-            f"[{PAGE_NAME}] CPU: {cpu_usage}%"
-        )
+        print(f"[{PAGE_NAME}] CPU: {cpu_usage}%")
 
-        print(
-            f"[{PAGE_NAME}] RAM: {ram_usage}%"
-        )
+        print(f"[{PAGE_NAME}] RAM: {ram_usage}%")
 
-        print(
-            f"[{PAGE_NAME}] Disk: {disk_usage}%"
-        )
+        print(f"[{PAGE_NAME}] Disk: {disk_usage}%")
 
-        print(
-            f"[{PAGE_NAME}] Last transaction: "
-            f"{last_transaction_dt}"
-        )
+        print(f"[{PAGE_NAME}] Last transaction: " f"{last_transaction_dt}")
 
-        print(
-            f"[{PAGE_NAME}] Running infrastructure RCA..."
-        )
+        print(f"[{PAGE_NAME}] Running infrastructure RCA...")
 
         analysis = analyze(
             cpu=cpu_usage,
@@ -358,27 +281,15 @@ def run():
         )
 
         if last_transaction_dt:
-            last_transaction = (
-                last_transaction_dt.strftime(
-                    "%b %d %H:%M:%S"
-                )
-            )
+            last_transaction = last_transaction_dt.strftime("%b %d %H:%M:%S")
         else:
             last_transaction = "No transaction found"
 
-        checked_at = datetime.now(
-            WIB
-        ).strftime(
-            "%d %b %Y %H:%M WIB"
-        )
+        checked_at = datetime.now(WIB).strftime("%d %b %Y %H:%M WIB")
 
-        output_sections.append(
-            "========================================"
-        )
+        output_sections.append("========================================")
 
-        output_sections.append(
-            "SERVER HEALTH"
-        )
+        output_sections.append("SERVER HEALTH")
 
         output_sections.append(
             format_usage(
@@ -401,33 +312,21 @@ def run():
             )
         )
 
-        output_sections.append(
-            f"Last Transaction: {last_transaction}"
-        )
+        output_sections.append(f"Last Transaction: {last_transaction}")
 
-        output_sections.append(
-            f"Status: {status}"
-        )
+        output_sections.append(f"Status: {status}")
 
         if root_causes:
             output_sections.append("")
-            output_sections.append(
-                "ROOT CAUSE"
-            )
+            output_sections.append("ROOT CAUSE")
 
             for cause in root_causes:
-                output_sections.append(
-                    f"- {cause}"
-                )
+                output_sections.append(f"- {cause}")
 
         output_sections.append("")
-        output_sections.append(
-            f"Checked: {checked_at}"
-        )
+        output_sections.append(f"Checked: {checked_at}")
 
-        terminal_output = "\n".join(
-            output_sections
-        )
+        terminal_output = "\n".join(output_sections)
 
         render_terminal(
             title=PAGE_NAME,
@@ -436,9 +335,7 @@ def run():
             output_path=screenshot_path,
         )
 
-        print(
-            f"[{PAGE_NAME}] Screenshot created"
-        )
+        print(f"[{PAGE_NAME}] Screenshot created")
 
         discord_lines = [
             f"🖥️ **{PAGE_NAME}**",
@@ -460,14 +357,10 @@ def run():
 
         if root_causes:
             discord_lines.append("")
-            discord_lines.append(
-                "**Critical Root Cause:**"
-            )
+            discord_lines.append("**Critical Root Cause:**")
 
             for cause in root_causes:
-                discord_lines.append(
-                    f"• {cause}"
-                )
+                discord_lines.append(f"• {cause}")
 
         if diagnostic_text:
             diagnostic_for_discord = format_diagnostics(
@@ -476,31 +369,17 @@ def run():
             )
 
             discord_lines.append("")
-            discord_lines.append(
-                "**Diagnostic:**"
-            )
-            discord_lines.append(
-                "```text"
-            )
-            discord_lines.append(
-                diagnostic_for_discord
-            )
-            discord_lines.append(
-                "```"
-            )
+            discord_lines.append("**Diagnostic:**")
+            discord_lines.append("```text")
+            discord_lines.append(diagnostic_for_discord)
+            discord_lines.append("```")
 
         discord_lines.append("")
-        discord_lines.append(
-            f"Checked: {checked_at}"
-        )
+        discord_lines.append(f"Checked: {checked_at}")
 
-        discord_content = "\n".join(
-            discord_lines
-        )
+        discord_content = "\n".join(discord_lines)
 
-        print(
-            f"[{PAGE_NAME}] Sending screenshot to Discord..."
-        )
+        print(f"[{PAGE_NAME}] Sending screenshot to Discord...")
 
         with open(
             screenshot_path,
@@ -508,9 +387,7 @@ def run():
         ) as image:
             response = requests.post(
                 webhook_url,
-                data={
-                    "content": discord_content
-                },
+                data={"content": discord_content},
                 files={
                     "file": (
                         screenshot_path,
@@ -526,19 +403,13 @@ def run():
             204,
         ):
             raise Exception(
-                f"Discord error: "
-                f"{response.status_code} "
-                f"{response.text}"
+                f"Discord error: " f"{response.status_code} " f"{response.text}"
             )
 
-        print(
-            f"[{PAGE_NAME}] Screenshot sent to Discord"
-        )
+        print(f"[{PAGE_NAME}] Screenshot sent to Discord")
 
     except Exception as error:
-        print(
-            f"[{PAGE_NAME}] ERROR: {error}"
-        )
+        print(f"[{PAGE_NAME}] ERROR: {error}")
         raise
 
     finally:
@@ -547,16 +418,10 @@ def run():
         except Exception:
             pass
 
-        if os.path.exists(
-            screenshot_path
-        ):
-            os.remove(
-                screenshot_path
-            )
+        if os.path.exists(screenshot_path):
+            os.remove(screenshot_path)
 
-        print(
-            f"[{PAGE_NAME}] SSH connection closed"
-        )
+        print(f"[{PAGE_NAME}] SSH connection closed")
 
 
 if __name__ == "__main__":

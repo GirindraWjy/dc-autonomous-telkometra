@@ -6,8 +6,4 @@ URL = "https://cpdashboard.metratv.co.id:8003/#/dashboard-all"
 
 
 def run():
-    run_page(
-        page_name=PAGE_NAME,
-        url=URL,
-        wait_after_load=5000
-    )
+    return run_page(page_name=PAGE_NAME, url=URL, wait_after_load=5000)
