@@ -63,10 +63,15 @@ def get_page_name(page):
     return getattr(page, "PAGE_NAME", page.__name__)
 
 
-def run_pages(pages, report_time, is_retry=False):
+def run_pages(pages, report_time, is_retry=False, is_startup=False):
     failed_pages = []
 
-    label = "RETRY" if is_retry else "SCHEDULED"
+    if is_startup:
+        label = "STARTUP"
+    elif is_retry:
+        label = "RETRY"
+    else:
+        label = "SCHEDULED"
 
     print("-" * 50)
     print(f"[{label}] Report: {report_time:%d-%m-%Y %H:%M WIB}")
@@ -119,9 +124,21 @@ def main():
     print("Schedule: 01:10, 03:10, ..., 23:10 WIB")
     print("Retry interval: setiap 10 menit jika gagal")
 
-    next_run = get_next_run()
-
     pending_retries = []
+
+    startup_time = now_wib()
+    failed_pages = run_pages(pages, startup_time, is_startup=True)
+
+    if failed_pages:
+        pending_retries.append(
+            {
+                "report_time": startup_time,
+                "pages": failed_pages,
+                "retry_at": now_wib() + RETRY_INTERVAL,
+            }
+        )
+
+    next_run = get_next_run()
 
     while True:
         now = now_wib()

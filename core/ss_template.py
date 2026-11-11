@@ -498,6 +498,7 @@ def run_page(
     wait_after_load=5000,
     before_screenshot=None,
     persistent_session_dir=None,
+    browser_channel="chrome",
 ):
     load_dotenv()
 
@@ -523,7 +524,7 @@ def run_page(
 
             if persistent_session_dir:
                 print(
-                    f"[{page_name}] Using persistent session: "
+                    f"[{page_name}] Using Chrome with persistent session: "
                     f"{persistent_session_dir}"
                 )
 
@@ -532,6 +533,7 @@ def run_page(
                 context = playwright.chromium.launch_persistent_context(
                     user_data_dir=persistent_session_dir,
                     headless=True,
+                    channel=browser_channel,
                     viewport={
                         "width": width,
                         "height": height,
@@ -545,9 +547,12 @@ def run_page(
                     page = context.new_page()
 
             else:
-                print(f"[{page_name}] Using temporary browser session")
+                print(f"[{page_name}] Using temporary Chrome session")
 
-                browser = playwright.chromium.launch(headless=True)
+                browser = playwright.chromium.launch(
+                    headless=True,
+                    channel=browser_channel,
+                )
 
                 context = browser.new_context(
                     viewport={
