@@ -497,9 +497,6 @@ def run_page(
     url,
     wait_after_load=5000,
     before_screenshot=None,
-    persistent_session_dir=None,
-    browser_channel="chrome",
-    headless=True,
 ):
     load_dotenv()
 
@@ -507,63 +504,46 @@ def run_page(
 
     width = int(os.getenv("SCREENSHOT_WIDTH", "1365"))
     height = int(os.getenv("SCREENSHOT_HEIGHT", "768"))
+    browser_cdp_url = os.getenv(
+        "BROWSER_CDP_URL",
+        "http://127.0.0.1:9222",
+    ).strip()
 
     if not webhook_url:
         raise ValueError("DISCORD_WEBHOOK_URL belum ditemukan di .env")
 
+    if not browser_cdp_url:
+        raise ValueError("BROWSER_CDP_URL tidak boleh kosong")
+
     screenshot_path = f"{page_name}.png"
 
     with sync_playwright() as playwright:
-        browser = None
         context = None
         page = None
 
         try:
             # ====================================================
-            # CREATE BROWSER CONTEXT
+            # CONNECT TO EXISTING CHROME
             # ====================================================
 
-            if persistent_session_dir:
-                print(
-                    f"[{page_name}] Using Chrome with persistent session: "
-                    f"{persistent_session_dir}"
+            print(f"[{page_name}] Connecting to existing Chrome at {browser_cdp_url}")
+
+            try:
+                browser = playwright.chromium.connect_over_cdp(browser_cdp_url)
+            except Exception as error:
+                raise RuntimeError(
+                    f"Tidak dapat terhubung ke Chrome di {browser_cdp_url}. "
+                    "Jalankan Chrome dengan remote debugging port 9222."
+                ) from error
+
+            if not browser.contexts:
+                raise RuntimeError(
+                    "Chrome terhubung, tetapi tidak memiliki browser context."
                 )
 
-                os.makedirs(persistent_session_dir, exist_ok=True)
-
-                context = playwright.chromium.launch_persistent_context(
-                    user_data_dir=persistent_session_dir,
-                    headless=headless,
-                    channel=browser_channel,
-                    viewport={
-                        "width": width,
-                        "height": height,
-                    },
-                    ignore_https_errors=True,
-                )
-
-                if context.pages:
-                    page = context.pages[0]
-                else:
-                    page = context.new_page()
-
-            else:
-                print(f"[{page_name}] Using temporary Chrome session")
-
-                browser = playwright.chromium.launch(
-                    headless=headless,
-                    channel=browser_channel,
-                )
-
-                context = browser.new_context(
-                    viewport={
-                        "width": width,
-                        "height": height,
-                    },
-                    ignore_https_errors=True,
-                )
-
-                page = context.new_page()
+            context = browser.contexts[0]
+            page = context.new_page()
+            page.set_viewport_size({"width": width, "height": height})
 
             # ====================================================
             # API RESPONSE TRACKING
@@ -788,15 +768,8 @@ def run_page(
                 print(f"[{page_name}] Screenshot cleanup failed: " f"{cleanup_error}")
 
             try:
-                if context:
-                    context.close()
-
-                    print(f"[{page_name}] Browser context closed")
+                if page:
+                    page.close()
+                    print(f"[{page_name}] Automation tab closed")
             except Exception as cleanup_error:
-                print(f"[{page_name}] Context cleanup failed: " f"{cleanup_error}")
-
-            try:
-                if browser:
-                    browser.close()
-            except Exception as cleanup_error:
-                print(f"[{page_name}] Browser cleanup failed: " f"{cleanup_error}")
+                print(f"[{page_name}] Tab cleanup failed: " f"{cleanup_error}")

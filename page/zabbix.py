@@ -18,9 +18,6 @@ DASHBOARD_URL = (
     f"{BASE_URL}/zabbix.php" "?action=dashboard.view" "&dashboardid=354" "&kiosk=1"
 )
 
-SESSION_DIR = os.path.join("browser_data", "zabbix")
-
-
 # ============================================================
 # ZABBIX LOGIN + DASHBOARD
 # ============================================================
@@ -215,7 +212,6 @@ def run():
         url=DASHBOARD_URL,
         wait_after_load=0,
         before_screenshot=zabbix_action,
-        persistent_session_dir=SESSION_DIR,
     )
 
 
