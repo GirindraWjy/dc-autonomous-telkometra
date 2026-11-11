@@ -10,4 +10,5 @@ def run():
         page_name=PAGE_NAME,
         url=URL,
         wait_after_load=5000,
+        headless=False,
     )
