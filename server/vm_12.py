@@ -148,7 +148,7 @@ def run():
         ):
             print(f"[{PAGE_NAME}] Running command {index}: {command}")
 
-            stdin, stdout, stderr = ssh.exec_command(
+            _, stdout, stderr = ssh.exec_command(
                 command,
                 timeout=60,
             )

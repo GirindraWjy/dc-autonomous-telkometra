@@ -174,8 +174,6 @@ def run():
 
     output_sections = []
     command_results = []
-    journal_output = ""
-
     try:
         print(f"[{PAGE_NAME}] Connecting to {HOST}...")
 
@@ -199,7 +197,7 @@ def run():
             else:
                 full_command = f"cd {CURRENT_DIRECTORY} && {command}"
 
-            stdin, stdout, stderr = ssh.exec_command(
+            _, stdout, stderr = ssh.exec_command(
                 full_command,
                 timeout=60,
             )
@@ -227,9 +225,6 @@ def run():
                 raise RuntimeError(
                     f"Command gagal: {command} " f"(exit code: {exit_code})"
                 )
-
-            if "journalctl" in command:
-                journal_output = stdout_text
 
             output_sections.append(f"$ {command}")
 

@@ -564,6 +564,7 @@ def run_page(
             # ====================================================
 
             failed_api_requests = []
+            failed_api_request_set = set()
 
             def handle_api_response(response):
                 try:
@@ -576,7 +577,9 @@ def run_page(
                         if status_code != 200:
                             api_error = f"{response.url} [{status_code}]"
 
-                            failed_api_requests.append(api_error)
+                            if api_error not in failed_api_request_set:
+                                failed_api_request_set.add(api_error)
+                                failed_api_requests.append(api_error)
 
                             print(f"[{page_name}] API ERROR: " f"{api_error}")
 
@@ -678,9 +681,6 @@ def run_page(
             body_text = page.locator("body").inner_text(timeout=30000).strip()
 
             dashboard_ready = len(body_text) > 100
-
-            # Hapus API error duplikat.
-            failed_api_requests = list(dict.fromkeys(failed_api_requests))
 
             # ====================================================
             # HEALTH BAR

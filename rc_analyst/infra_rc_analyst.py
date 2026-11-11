@@ -23,7 +23,7 @@ def _run_diagnostic(
     """
 
     try:
-        stdin, stdout, stderr = ssh.exec_command(
+        _, stdout, stderr = ssh.exec_command(
             command,
             timeout=timeout,
         )
@@ -219,6 +219,12 @@ def _find_disk_root_cause(ssh):
     if not diagnostics["partitions"]:
         return diagnostics
 
+    deleted_result = _run_diagnostic(
+        ssh,
+        "lsof +L1 2>/dev/null | head -n 20",
+        timeout=60,
+    )
+
     # ========================================================
     # 2. ANALYZE EACH FULL PARTITION
     # ========================================================
@@ -357,18 +363,6 @@ def _find_disk_root_cause(ssh):
         # ====================================================
         # Deleted files still held open
         # ====================================================
-
-        deleted_command = (
-            "lsof +L1 "
-            "2>/dev/null "
-            "| head -n 20"
-        )
-
-        deleted_result = _run_diagnostic(
-            ssh,
-            deleted_command,
-            timeout=60,
-        )
 
         if deleted_result["output"]:
 
